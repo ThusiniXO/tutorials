@@ -1,8 +1,14 @@
 import logging
 import os
+import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 import torch
+
+import numpy as np
+import nibabel as nib
+
+
 import torch.distributed as dist
 from monai.config import print_config
 from monai.handlers import (
@@ -23,6 +29,33 @@ from create_network import get_network
 from evaluator import DynUNetEvaluator
 from task_params import data_loader_params, patch_size
 from trainer import DynUNetTrainer
+import matplotlib.pyplot as plt
+import gzip
+
+#plt.figure()
+#plt.title("Epoch losses")
+#plt.xlabel("Epoch")
+#plt.ylabel("Loss")
+#lossVal = []
+
+torch.cuda.empty_cache()
+
+
+# Create small visualistaion function
+def plot_ims(ims, filename, shape=None, figsize=(10, 10), titles=None, val_output_dir="D:\\MSD"):
+    shape = (1, len(ims)) if shape is None else shape
+    plt.subplots(*shape, figsize=figsize)
+    for i, im in enumerate(ims):
+        plt.subplot(*shape, i + 1)
+        print()
+        #im = plt.imread(im) if isinstance(im, str) else torch.squeeze(im)
+        plt.imshow(im, cmap='gray')
+        if titles is not None:
+            plt.title(titles[i])
+        plt.axis('off')
+    plt.tight_layout()
+    #plt.show()
+    plt.savefig(os.path.join(val_output_dir, f"{filename}.jpg"))
 
 
 def validation(args):
@@ -46,6 +79,8 @@ def validation(args):
         torch.cuda.set_device(device)
     else:
         device = torch.device("cuda")
+        #PYTHONUNBUFFERED = 1;PYTORCH_CUDA_ALLOC_CONF = max_split_size_mb:400.00
+        #print(torch.cudamax_memory_allocated(device=device))
 
     properties, val_loader = get_data(args, mode="validation")
     net = get_network(properties, task_id, val_output_dir, checkpoint)
@@ -99,8 +134,11 @@ def train(args):
     val_output_dir = "./runs_{}_fold{}_{}/".format(task_id, fold, args.expr_name)
     log_filename = "nnunet_task{}_fold{}.log".format(task_id, fold)
     log_filename = os.path.join(val_output_dir, log_filename)
+    loss_filename = "nnunet_task{}_fold{}_loss.csv".format(task_id, fold)
+    loss_filename = os.path.join(val_output_dir, loss_filename)
     interval = args.interval
     learning_rate = args.learning_rate
+    single_epoch_iterations = args.iterations_per_epoch
     max_epochs = args.max_epochs
     multi_gpu_flag = args.multi_gpu
     amp_flag = args.amp
@@ -130,6 +168,14 @@ def train(args):
 
     properties, val_loader = get_data(args, mode="validation")
     _, train_loader = get_data(args, batch_size=train_batch_size, mode="train")
+
+    #view image
+    #filedic="D:\\MSD\\Task04_Hippocampus\\imagesTr"
+    #all_filenames = [nib.load(os.path.join(filedic, f)).get_fdata() for f in os.listdir(filedic)]
+    #rand_images = all_filenames[0][:,:, 10]#np.random.choice(all_filenames, 8, replace=False)
+    #print(rand_images.shape)
+    #[:,:, 10]
+    #plot_ims(rand_images)
 
     # produce the network
     checkpoint = args.checkpoint
@@ -190,7 +236,7 @@ def train(args):
     train_handlers += [
         ValidationHandler(validator=evaluator, interval=interval, epoch_level=True),
         StatsHandler(
-            tag_name="train_loss", output_transform=from_engine(["loss"], first=True)
+            tag_name="train_lossss", output_transform=from_engine(["loss"], first=False)
         ),
     ]
 
@@ -201,6 +247,7 @@ def train(args):
         network=net,
         optimizer=optimizer,
         loss_function=loss,
+        epoch_length=single_epoch_iterations,
         inferer=SimpleInferer(),
         postprocessing=None,
         key_train_metric=None,
@@ -217,22 +264,78 @@ def train(args):
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-
+    formatter2 = logging.Formatter(
+        " %(message)s"
+    )
     # Setup file handler
     fhandler = logging.FileHandler(log_filename)
     fhandler.setLevel(logging.INFO)
     fhandler.setFormatter(formatter)
-
     logger.addHandler(fhandler)
+
+    fhandler2 = logging.FileHandler(loss_filename)
+    fhandler2.setLevel(logging.INFO)
+    fhandler2.setFormatter(formatter2)
+    logger.addHandler(fhandler2)
 
     chandler = logging.StreamHandler()
     chandler.setLevel(logging.INFO)
     chandler.setFormatter(formatter)
     logger.addHandler(chandler)
 
+
+
+    #logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
     logger.setLevel(logging.INFO)
 
+
     trainer.run()
+
+
+    inputimages = [trainer.state.output[i]['image'].cpu()[0, :, :, 10] for i in range(len(trainer.state.output))]
+    plot_ims(inputimages[0:1],"inputimages")
+
+    print(trainer.state.output[0]['image'])
+    print('seperate')
+    print(trainer.state.output[0]['loss'])
+    predictions = [trainer.state.output[i]['pred'][0].cpu()[0, :, :, 10] for i in range(len(trainer.state.output))]
+    #predictions = [trainer.state.output[0][0]['pred'][0, :, :, 10] ]
+
+    plot_ims(predictions[0:1],"predictions")
+
+    #print(len(trainer.state.output[0][0]))
+
+    #print('before')
+    #print(len(trainer.state.output))
+
+
+    #print(trainer.state.output[0]['pred'][0].shape)#2
+    #print(trainer.state.output[1][0]['pred'].shape)
+    #print(trainer.state.output[0][0]['loss'])
+
+    #print(trainer.state.output[0]['image'].shape)
+    #print(trainer.state.output[0]['label'].shape)
+
+
+
+    #image = trainer.state.output[0]['image'].cpu()[0, :, :, 10]
+    #plt.imshow(image)
+    #plt.show()
+    #image2 = trainer.state.output[0]['pred'].cpu()[0, :, :, 10]
+    #plt.imshow(image2)
+    #plt.show()
+    #print(trainer.state.output[0]["image"].shape)
+    #print('after')
+    #print(trainer.state.output)
+    #print(trainer.state.output[0]["image"].shape)
+
+
+
+    #print(trainer.state.output[0][0]["pred"])
+    #print(trainer.state.output[0][0]["pred"].shape)
+
+
 
 
 if __name__ == "__main__":
@@ -245,7 +348,7 @@ if __name__ == "__main__":
         "-root_dir",
         "--root_dir",
         type=str,
-        default="/workspace/data/medical/",
+        default="D:\\MSD",
         help="dataset path",
     )
     parser.add_argument(
@@ -279,7 +382,7 @@ if __name__ == "__main__":
         "-interval",
         "--interval",
         type=int,
-        default=5,
+        default=1,
         help="the validation interval under epoch level.",
     )
     parser.add_argument(
@@ -334,10 +437,17 @@ if __name__ == "__main__":
     )
     parser.add_argument("-learning_rate", "--learning_rate", type=float, default=1e-2)
     parser.add_argument(
+        "-iterations_per_epoch",
+        "--iterations_per_epoch",
+        type=int,
+        default=10,  #initial value was 23
+        help="number of iterations per epoch in the training.",
+    )
+    parser.add_argument(
         "-max_epochs",
         "--max_epochs",
         type=int,
-        default=1000,
+        default=1,
         help="number of epochs of training.",
     )
     parser.add_argument(
@@ -403,3 +513,4 @@ if __name__ == "__main__":
         train(args)
     elif args.mode == "val":
         validation(args)
+

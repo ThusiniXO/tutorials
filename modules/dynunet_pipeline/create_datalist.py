@@ -27,7 +27,8 @@ def create_datalist(
     }
 
     dataset_file_path = os.path.join(
-        dataset_input_dir, task_name[task_id], "dataset.json"
+        #dataset_input_dir, task_name[task_id], f"dataset_task{task_id}.json"
+        dataset_input_dir, task_name[task_id], f"dataset.json"
     )
 
     with open(dataset_file_path, "r") as f:
@@ -68,11 +69,11 @@ if __name__ == "__main__":
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 
     parser.add_argument(
-        "-input_dir", "--input_dir", type=str, default="/workspace/data/medical/"
+        "-input_dir", "--input_dir", type=str, default="D:\MSD"
     )
     parser.add_argument("-output_dir", "--output_dir", type=str, default="config/")
     parser.add_argument(
-        "-task_id", "--task_id", type=str, default="04", help="task 01 to 10"
+        "-task_id", "--task_id", type=str, default="10", help="task 01 to 10"
     )
     parser.add_argument(
         "-num_folds", "--num_folds", type=int, default=5, help="number of folds"

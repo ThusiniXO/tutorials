@@ -1,11 +1,15 @@
 from typing import Any, Dict, Tuple
 
+import matplotlib.pyplot as plt
 import torch
 from ignite.engine import Engine
 from monai.engines import SupervisedTrainer
 from monai.engines.utils import CommonKeys as Keys
 from monai.engines.utils import IterationEvents
 from torch.nn.parallel import DistributedDataParallel
+import matplotlib.pyplot as plt
+
+
 
 
 class DynUNetTrainer(SupervisedTrainer):

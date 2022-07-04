@@ -79,7 +79,7 @@ if __name__ == "__main__":
         "-root_dir",
         "--root_dir",
         type=str,
-        default="/workspace/data/medical/",
+        default="D:\\MSD",
         help="dataset path",
     )
     parser.add_argument(
